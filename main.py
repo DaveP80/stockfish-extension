@@ -51,9 +51,12 @@ def extract_chess_moves(text_blob):
 
 def generate_fen(moves):
     board = chess.Board()
-    for move in moves:
-        board.push_san(move)
-    return board.fen()
+    try:
+        for move in moves:
+            board.push_san(move)
+        return board
+    except:
+        return ""
 
 def scrape_kwdb_text(args):
     response = requests.get(f"https://lichess.org/{args}")
@@ -66,15 +69,9 @@ def scrape_kwdb_text(args):
             filtered_notations = [item for item in l if not re.match(pattern, item)]
             if len(filtered_notations) > 1:
                 fengen = generate_fen(filtered_notations)
-                if len(fengen) > 5:
+                if not isinstance(fengen, str):
                     return fengen
-                else: return ""
-            else: return ""
-
-
-        else: return ""
-    else:
-        return ""
+    return ""
 
 @app.get('/', tags=['Default'])
 def index():
@@ -85,16 +82,17 @@ def index():
 @app.get('/suggest-move/{gameid}', tags=['Chess Engine'])
 async def suggest_move(gameid: str):
 
-    usefen = scrape_kwdb_text(gameid)
-    if len(usefen) == 0:
+    board_fen = scrape_kwdb_text(gameid)
+    if isinstance(board_fen, str):
         return { "nodata": "unable to read fen or stockfish error" }
 
     stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
     # Set Stockfish options for performance
     stockfish.set_depth(20)  # Maximum search depth
 
-    stockfish.set_fen_position(usefen)
+    stockfish.set_fen_position(board_fen.fen())
     stockfish._go_time(1000)
+    movetopush = ""
     last_text = ""
     count = 0
     while True:
@@ -105,12 +103,22 @@ async def suggest_move(gameid: str):
         if splitted_text[0] == "bestmove":
             stockfish.info = last_text
             last_text = None if splitted_text[1] == "(none)" else " ".join(splitted_text)
+            if last_text != None:
+                movetopush = splitted_text[1]
             break
         last_text = text
         count += 1
     if count > 4999 or last_text == None:
         return { "nodata": "unable to read fen or stockfish error" } 
-    return {"data": last_text}
+    try:
+        if movetopush != "":
+            move = chess.Move.from_uci(movetopush)
+            board_fen.push(move)
+            boardstr = board_fen.fen()
+            result = chess.Board(boardstr)
+            return {"data": last_text, "board": str(result) }
+    except:
+        return {"data": last_text }
 
 @app.get("/evaluation/")
 async def eval_fen(fen: str = Query(None)):
@@ -137,7 +145,9 @@ async def eval_fen(fen: str = Query(None)):
                 count += 1
             if count > 4999 or last_text == None:
                 return { "nodata": "unable to read fen or stockfish error" } 
-            return {"data": last_text}
+
+            evalboard = chess.Board(fen)
+            return {"data": last_text, "board": str(evalboard) }
         except:
             return { "nodata": "bad fen string"}
     else:
