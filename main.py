@@ -13,6 +13,8 @@ first_moves = [
     "1. a3", "1. a4", "1. b4", "1. c3", "1. d3", "1. e3", "1. f3", "1. h3", "1. h4", "1. Na3", "1. Nh3"
 ]
 
+gamestart = ["Game is still ongoing", "is playing"]
+
 STOCKFISH_PATH = os.getenv('STOCKFISH_PATH') or 'stockfish'
 
 DESCRIPTION = """
@@ -35,6 +37,12 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+def check_substrings(text_blob, substrings):
+    for substring in substrings:
+        if substring.lower() in text_blob.lower():
+            return True
+    return False
+
 def extract_chess_moves(text_blob):
     pattern = r'\b(?:' + '|'.join(re.escape(move) for move in first_moves) + r')\b'
 
@@ -52,9 +60,11 @@ def extract_chess_moves(text_blob):
 def generate_fen(moves):
     board = chess.Board()
     try:
-        for move in moves:
-            board.push_san(move)
-        return board
+        if moves:
+            for move in moves:
+                board.push_san(move)
+            return board
+        else: return board
     except:
         return ""
 
@@ -71,6 +81,9 @@ def scrape_kwdb_text(args):
                 fengen = generate_fen(filtered_notations)
                 if not isinstance(fengen, str):
                     return fengen
+        elif len(chess_moves) == 0 and check_substrings(response.text, gamestart):
+            newgame = generate_fen(None)
+            return newgame
     return ""
 
 @app.get('/', tags=['Default'])
@@ -112,11 +125,14 @@ async def suggest_move(gameid: str):
         return { "nodata": "unable to read fen or stockfish error" } 
     try:
         if movetopush != "":
+            whosturn = "white"
+            if board_fen.turn != chess.WHITE:
+                whosturn = "black"
             move = chess.Move.from_uci(movetopush)
             board_fen.push(move)
             boardstr = board_fen.fen()
             result = chess.Board(boardstr)
-            return {"data": last_text, "board": str(result) }
+            return {"data": last_text, "board": str(result), "turn": whosturn }
     except:
         return {"data": last_text }
 
