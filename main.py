@@ -77,7 +77,7 @@ def scrape_kwdb_text(args):
             pattern = r'^\d+\.$|^$'
 
             filtered_notations = [item for item in l if not re.match(pattern, item)]
-            if len(filtered_notations) > 1:
+            if len(filtered_notations) > 0:
                 fengen = generate_fen(filtered_notations)
                 if not isinstance(fengen, str):
                     return fengen
