@@ -14,6 +14,10 @@ COPY . .
 
 ENV STOCKFISH_PATH='/usr/games/stockfish'
 
+ENV GOOGLE_APPLICATION_CREDENTIALS='/app/credentials.json'
+
+ENV GCP_PROJECT_ID=''
+
 EXPOSE 8080
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
 

@@ -7,6 +7,8 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import chess
+from scrapy.script import getAvatars
+from google.cloud import firestore
 
 first_moves = [
     "1. e4", "1. d4", "1. Nf3", "1. Nc3", "1. Bc4", "1. Bf4", "1. g3", "1. b3", "1. f4", "1. c4",
@@ -15,14 +17,15 @@ first_moves = [
 
 gamestart = ["Game is still ongoing", "is playing"]
 
+GCP_PROJECT = os.getenv('GCP_PROJECT_ID')
 STOCKFISH_PATH = os.getenv('STOCKFISH_PATH') or 'stockfish'
-
 DESCRIPTION = """
 This API does one thing only: it takes a chess game and returns the
 best next move. This is designed to give move advice for and active lichess game
 with the url template of: https://lichess.org/<gameid>
 """
 
+db = firestore.Client(project=GCP_PROJECT)
 app = FastAPI(
     title='lichess helper',
     description=DESCRIPTION,
@@ -36,6 +39,10 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+class UserBody(BaseModel):
+    user: str
+    img: str
 
 def check_substrings(text_blob, substrings):
     for substring in substrings:
@@ -168,3 +175,36 @@ async def eval_fen(fen: str = Query(None)):
             return { "nodata": "bad fen string"}
     else:
         return {"message": "No query parameter provided"}
+
+@app.get('/get-avatars', tags=['urls'])
+async def get_urls():
+    getAvatars()
+    return {}
+
+@app.post('/set-avatar')
+async def set_avatar(user: UserBody):
+    doc_ref = db.collection("users")
+    if user.user and user.img:
+        doc_ref.add({ user.user: user.img })
+        return { "data": f"document set for {user.user}"}
+    else:
+        return { "nodata": "missing username string and image string" }
+
+
+@app.get('/get-useravatar/{username}', tags=['fetch avatar'])
+async def get_useravatar(username: str):
+    doc_ref = db.collection(u'chessextension').document("users")
+    doc = doc_ref.get()
+
+    if doc.exists:
+        data = doc.to_dict()
+        for k,v in data.items():
+            if k == "data":
+                obj = data[k]
+                for n,m in obj.items():
+                    if n == username:
+                        return { "data" : { n: m}}
+        return { "nodata": "username not found in collection" }
+    else:
+        return { "nodata": "firestore not found collection users" }
+
