@@ -14,8 +14,6 @@ COPY . .
 
 ENV STOCKFISH_PATH='/usr/games/stockfish'
 
-ENV GOOGLE_APPLICATION_CREDENTIALS='/app/credentials.json'
-
 ENV GCP_PROJECT_ID=''
 
 EXPOSE 8080

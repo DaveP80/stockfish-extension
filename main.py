@@ -107,8 +107,7 @@ async def suggest_move(gameid: str):
         return { "nodata": "unable to read fen or stockfish error" }
 
     stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
-    # Set Stockfish options for performance
-    stockfish.set_depth(20)  # Maximum search depth
+    stockfish.set_depth(20)  
 
     stockfish.set_fen_position(board_fen.fen())
     stockfish._go_time(1000)
@@ -176,35 +175,30 @@ async def eval_fen(fen: str = Query(None)):
     else:
         return {"message": "No query parameter provided"}
 
-@app.get('/get-avatars', tags=['urls'])
-async def get_urls():
-    getAvatars()
-    return {}
+# @app.get('/get-avatars', tags=['urls'])
+# async def get_urls():
+#     getAvatars()
+#     return {}
 
 @app.post('/set-avatar')
 async def set_avatar(user: UserBody):
-    doc_ref = db.collection("users")
+    collection_ref = db.collection("chessextension")
     if user.user and user.img:
-        doc_ref.add({ user.user: user.img })
-        return { "data": f"document set for {user.user}"}
+      doc_ref = collection_ref.document(user.user)
+  
+      doc_ref.set({"user": user.user, "img": user.img})
+      return { "data": f"document set for {user.user}"}
     else:
         return { "nodata": "missing username string and image string" }
 
-
 @app.get('/get-useravatar/{username}', tags=['fetch avatar'])
 async def get_useravatar(username: str):
-    doc_ref = db.collection(u'chessextension').document("users")
+    doc_ref = db.collection(u'chessextension').document(username)
     doc = doc_ref.get()
 
     if doc.exists:
         data = doc.to_dict()
-        for k,v in data.items():
-            if k == "data":
-                obj = data[k]
-                for n,m in obj.items():
-                    if n == username:
-                        return { "data" : { n: m}}
-        return { "nodata": "username not found in collection" }
+        return data
     else:
-        return { "nodata": "firestore not found collection users" }
+        return { "nodata": "user not found" }
 
