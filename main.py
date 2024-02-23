@@ -20,7 +20,7 @@ gamestart = ["Game is still ongoing", "is playing"]
 GCP_PROJECT = os.getenv('GCP_PROJECT_ID')
 STOCKFISH_PATH = os.getenv('STOCKFISH_PATH') or 'stockfish'
 DESCRIPTION = """
-This API does one thing only: it takes a chess game and returns the
+This API takes a chess game and returns the
 best next move. This is designed to give move advice for and active lichess game
 with the url template of: https://lichess.org/<gameid>
 """
@@ -51,16 +51,14 @@ def check_substrings(text_blob, substrings):
     return False
 
 def extract_chess_moves(text_blob):
-    pattern = r'\b(?:' + '|'.join(re.escape(move) for move in first_moves) + r')\b'
 
-    match = re.search(pattern, text_blob)
+    match = None
+    for fm in first_moves:
+        match = re.search(f"({fm}[^\*]+)|({fm}\*)", text_blob)
+        if match:
+            break
     if match:
-        start_index = match.start()
-        end_index = text_blob.find("*", start_index)  
-        if end_index == -1:  
-            end_index = len(text_blob)
-        region = text_blob[start_index:end_index]
-        return region
+        return match.group()
     else:
         return ""
 

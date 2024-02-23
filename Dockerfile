@@ -14,7 +14,7 @@ COPY . .
 
 ENV STOCKFISH_PATH='/usr/games/stockfish'
 
-ENV GCP_PROJECT_ID=''
+ENV GCP_PROJECT_ID='majestic-cairn-365919'
 
 EXPOSE 8080
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
