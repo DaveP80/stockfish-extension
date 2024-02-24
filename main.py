@@ -16,13 +16,11 @@ first_moves = [
 gamestart = ["Game is still ongoing", "is playing"]
 
 STOCKFISH_PATH = os.getenv('STOCKFISH_PATH') or 'stockfish'
-
 DESCRIPTION = """
-This API does one thing only: it takes a chess game and returns the
+This API takes a chess game and returns the
 best next move. This is designed to give move advice for and active lichess game
 with the url template of: https://lichess.org/<gameid>
 """
-
 app = FastAPI(
     title='lichess helper',
     description=DESCRIPTION,
@@ -37,6 +35,10 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+class UserBody(BaseModel):
+    user: str
+    img: str
+
 def check_substrings(text_blob, substrings):
     for substring in substrings:
         if substring.lower() in text_blob.lower():
@@ -44,16 +46,14 @@ def check_substrings(text_blob, substrings):
     return False
 
 def extract_chess_moves(text_blob):
-    pattern = r'\b(?:' + '|'.join(re.escape(move) for move in first_moves) + r')\b'
 
-    match = re.search(pattern, text_blob)
+    match = None
+    for fm in first_moves:
+        match = re.search(f"({fm}[^\*]+)|({fm}\*)", text_blob)
+        if match:
+            break
     if match:
-        start_index = match.start()
-        end_index = text_blob.find("*", start_index)  
-        if end_index == -1:  
-            end_index = len(text_blob)
-        region = text_blob[start_index:end_index]
-        return region
+        return match.group()
     else:
         return ""
 
@@ -100,8 +100,7 @@ async def suggest_move(gameid: str):
         return { "nodata": "unable to read fen or stockfish error" }
 
     stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
-    # Set Stockfish options for performance
-    stockfish.set_depth(20)  # Maximum search depth
+    stockfish.set_depth(20)  
 
     stockfish.set_fen_position(board_fen.fen())
     stockfish._go_time(1000)

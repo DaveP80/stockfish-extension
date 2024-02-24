@@ -2,3 +2,5 @@
 venv
 *.DS_Store
 notes.txt
+scrapy
+credentials.json
