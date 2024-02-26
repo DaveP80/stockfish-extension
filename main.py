@@ -7,6 +7,8 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import chess
+from Instance.instance import instance_info, get_instance_info
+from ev.script import analyze
 
 first_moves = [
     "1. e4", "1. d4", "1. Nf3", "1. Nc3", "1. Bc4", "1. Bf4", "1. g3", "1. b3", "1. f4", "1. c4",
@@ -98,11 +100,17 @@ async def suggest_move(gameid: str):
     board_fen = scrape_kwdb_text(gameid)
     if isinstance(board_fen, str):
         return { "nodata": "unable to read fen or stockfish error" }
+    k = board_fen.fen()
+    res = instance_info.get_info(k)
+    if res and ("data" in res or "board" in res or "turn" in res):
+        get_instance_info()
+        return res
 
     stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
     stockfish.set_depth(20)  
 
-    stockfish.set_fen_position(board_fen.fen())
+    stockfish.set_fen_position(k)
+    
     stockfish._go_time(1000)
     movetopush = ""
     last_text = ""
@@ -131,8 +139,10 @@ async def suggest_move(gameid: str):
             board_fen.push(move)
             boardstr = board_fen.fen()
             result = chess.Board(boardstr)
+            instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn })
             return {"data": last_text, "board": str(result), "turn": whosturn }
     except:
+        instance_info.set_info(k, {"data": last_text})
         return {"data": last_text }
 
 @app.get("/evaluation/")
@@ -167,3 +177,28 @@ async def eval_fen(fen: str = Query(None)):
             return { "nodata": "bad fen string"}
     else:
         return {"message": "No query parameter provided"}
+
+@app.get('/winning/{gameid}', tags=['Winning Percentage'])
+async def winning_perc(gameid: str):
+    board_fen = scrape_kwdb_text(gameid)
+    if isinstance(board_fen, str):
+        return { "nodata": "unable to read fen or stockfish error" }
+    k = board_fen.fen()
+    res = instance_info.get_info(k)
+    if res and ('winning' in res):
+        return res.winning
+    winobj = None
+    try:
+        winobj = analyze(STOCKFISH_PATH, 2, 64, k, 2, 20)
+        if res and winobj:
+            res["winning"] = winobj
+            instance_info.set_info(k, res)
+        elif not res and winobj:
+            instance_info.set_info(k, { "winning": winobj })
+        if winobj:
+            return winobj
+        else: return {"nodata": "error getting winning percentage"}
+    except:
+        return {"nodata": "error getting winning percentage"}
+    
+    
