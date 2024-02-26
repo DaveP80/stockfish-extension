@@ -7,10 +7,10 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import chess
-from scrapy.script import getAvatars
+from scrappy import getAvatars
 from google.cloud import firestore
 from Instance.instance import instance_info, get_instance_info
-from ev.script import analyze
+from ev import analyze
 
 first_moves = [
     "1. e4", "1. d4", "1. Nf3", "1. Nc3", "1. Bc4", "1. Bf4", "1. g3", "1. b3", "1. f4", "1. c4",
@@ -110,7 +110,6 @@ async def suggest_move(gameid: str):
     k = board_fen.fen()
     res = instance_info.get_info(k)
     if res and ("data" in res or "board" in res or "turn" in res):
-        get_instance_info()
         return filter_dict(res, ["data", "board", "turn"])
 
     stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
@@ -231,7 +230,7 @@ async def winning_perc(gameid: str):
         return res.get("winning")
     winobj = None
     try:
-        winobj = analyze(STOCKFISH_PATH, 2, 64, k, 2, 20)
+        winobj = analyze(STOCKFISH_PATH, 1, 64, k, 2, 20)
         if res and winobj:
             res["winning"] = winobj
             instance_info.set_info(k, res)
@@ -239,6 +238,6 @@ async def winning_perc(gameid: str):
             instance_info.set_info(k, { "winning": winobj })
         if winobj:
             return winobj
-        else: return {"nodata": "error getting winning percentage"}
+        else: return {"nodata": "error setting Instance object"}
     except:
         return {"nodata": "error getting winning percentage"}
