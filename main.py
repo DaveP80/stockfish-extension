@@ -88,6 +88,9 @@ def scrape_kwdb_text(args):
             return newgame
     return ""
 
+def filter_dict(original_dict, keys_to_keep):
+    return {key: original_dict[key] for key in keys_to_keep if key in original_dict}
+
 @app.get('/', tags=['Default'])
 def index():
 
@@ -104,7 +107,7 @@ async def suggest_move(gameid: str):
     res = instance_info.get_info(k)
     if res and ("data" in res or "board" in res or "turn" in res):
         get_instance_info()
-        return res
+        return filter_dict(res, ["data", "board", "turn"])
 
     stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
     stockfish.set_depth(20)  
@@ -139,10 +142,18 @@ async def suggest_move(gameid: str):
             board_fen.push(move)
             boardstr = board_fen.fen()
             result = chess.Board(boardstr)
-            instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn })
+            if res:
+                res.update({"data": last_text, "board": str(result), "turn": whosturn })
+                instance_info.set_info(k, res)
+            else:
+                instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn })
             return {"data": last_text, "board": str(result), "turn": whosturn }
     except:
-        instance_info.set_info(k, {"data": last_text})
+        if res:
+            res.update({"data": last_text})
+            instance_info.set_info(k, res)
+        else:
+            instance_info.set_info(k, {"data": last_text})
         return {"data": last_text }
 
 @app.get("/evaluation/")
@@ -186,7 +197,7 @@ async def winning_perc(gameid: str):
     k = board_fen.fen()
     res = instance_info.get_info(k)
     if res and ('winning' in res):
-        return res.winning
+        return res.get("winning")
     winobj = None
     try:
         winobj = analyze(STOCKFISH_PATH, 2, 64, k, 2, 20)
