@@ -1,21 +1,18 @@
 import chess
 import chess.engine
 
-
 def analyze(engine_file, threads, hash_mb, fen, movetime_sec, max_depth):
 
     engine = chess.engine.SimpleEngine.popen_uci(engine_file)
 
-    # Set threads and hash engine options.
     engine.configure({'Threads': threads})
     engine.configure({'Hash': hash_mb})
 
     limit = chess.engine.Limit(time=movetime_sec, depth=max_depth)
     board = chess.Board(fen, chess960=False)
-    stm = board.turn  # stm is Side To Move
+    stm = board.turn
     stor = []
 
-    # Get engine analysis info while it is analyzing the position.
     with engine.analysis(board, limit=limit) as analysis:
         for info in analysis:
             eng_score = info.get("score")

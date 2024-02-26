@@ -13,5 +13,4 @@ instance_info = InstanceInfo()
 
 # Dependency to inject instance_info into endpoints
 def get_instance_info():
-    print(instance_info.info)
     return instance_info
