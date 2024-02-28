@@ -1,7 +1,8 @@
 import chess
 import chess.engine
+from Instance.instance import instance_info
 
-def analyze(engine_file, threads, hash_mb, fen, movetime_sec, max_depth):
+def analyze(engine_file, threads, hash_mb, fen, movetime_sec, max_depth, shorth):
     try:
         engine = chess.engine.SimpleEngine.popen_uci(engine_file)
 
@@ -41,9 +42,8 @@ def analyze(engine_file, threads, hash_mb, fen, movetime_sec, max_depth):
             stor = None
 
         engine.quit()
-        return stor
+        if stor:
+            instance_info.set_info(shorth, stor)
 
     except Exception as e:
         print("Error:", str(e))
-        return None
-

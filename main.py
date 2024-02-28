@@ -11,6 +11,7 @@ from scrappy import getAvatars
 from google.cloud import firestore
 from Instance.instance import instance_info, get_instance_info
 from ev import analyze
+import hashlib
 
 first_moves = [
     "1. e4", "1. d4", "1. Nf3", "1. Nc3", "1. Bc4", "1. Bf4", "1. g3", "1. b3", "1. f4", "1. c4",
@@ -159,6 +160,73 @@ async def suggest_move(gameid: str):
             instance_info.set_info(k, {"data": last_text})
         return {"data": last_text }
 
+@app.get('/chesscom/')
+async def chessdotcom(moves: str = Query(None)):
+    if moves:
+        try:
+            board_fen = None
+            if "newgame" in moves:
+                board_fen = generate_fen(None)
+            str_with_sp = moves.replace("%20", " ")
+            formatted = str_with_sp.split(" ")
+            if len(formatted) > 0 and "newgame" not in moves:
+                board_fen = generate_fen(formatted)
+            if not isinstance(board_fen, str):
+                k = board_fen.fen()
+                res = instance_info.get_info(k)
+                if res and ("data" in res or "board" in res or "turn" in res):
+                    return filter_dict(res, ["data", "board", "turn"])
+
+                stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
+                stockfish.set_depth(20)  
+
+                stockfish.set_fen_position(k)
+                
+                stockfish._go_time(1000)
+                movetopush = ""
+                last_text = ""
+                count = 0
+                while True:
+                    if count > 5000:
+                        break
+                    text = stockfish._read_line()
+                    splitted_text = text.split(" ")
+                    if splitted_text[0] == "bestmove":
+                        stockfish.info = last_text
+                        last_text = None if splitted_text[1] == "(none)" else " ".join(splitted_text)
+                        if last_text != None:
+                            movetopush = splitted_text[1]
+                        break
+                    last_text = text
+                    count += 1
+                if count > 4999 or last_text == None:
+                    return { "nodata": "unable to read fen or stockfish error" } 
+                try:
+                    if movetopush != "":
+                        whosturn = "white"
+                        if board_fen.turn != chess.WHITE:
+                            whosturn = "black"
+                        move = chess.Move.from_uci(movetopush)
+                        board_fen.push(move)
+                        boardstr = board_fen.fen()
+                        result = chess.Board(boardstr)
+                        if res:
+                            res.update({"data": last_text, "board": str(result), "turn": whosturn })
+                            instance_info.set_info(k, res)
+                        else:
+                            instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn })
+                        return {"data": last_text, "board": str(result), "turn": whosturn }
+                except:
+                    if res:
+                        res.update({"data": last_text})
+                        instance_info.set_info(k, res)
+                    else:
+                        instance_info.set_info(k, {"data": last_text})
+                    return {"data": last_text }
+            return { "nodata": "error with stockfish getting moves from move list" }
+        except:
+            return { "nodata": "error reading query param string" }
+    return { "nodata": "no move list sent to server"}
 @app.get("/evaluation/")
 async def eval_fen(fen: str = Query(None)):
     if fen:
@@ -228,9 +296,11 @@ async def winning_perc(gameid: str):
     res = instance_info.get_info(k)
     if res and ('winning' in res):
         return res.get("winning")
-    winobj = None
     try:
-        winobj = analyze(STOCKFISH_PATH, 1, 64, k, 2, 20)
+        shorth = hashlib.sha256(k.encode()).hexdigest()
+        shorth = shorth[:10]
+        analyze(STOCKFISH_PATH, 1, 64, k, 2, 20, shorth)
+        winobj = instance_info.get_info(shorth)
         if res and winobj:
             res["winning"] = winobj
             instance_info.set_info(k, res)
