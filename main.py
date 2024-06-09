@@ -227,6 +227,7 @@ async def chessdotcom(moves: str = Query(None)):
         except:
             return { "nodata": "error reading query param string" }
     return { "nodata": "no move list sent to server"}
+
 @app.get("/evaluation/")
 async def eval_fen(fen: str = Query(None)):
     if fen:
@@ -289,6 +290,7 @@ async def get_useravatar(username: str):
 
 @app.get('/winning/{gameid}', tags=['Winning Percentage'])
 async def winning_perc(gameid: str):
+    return {}
     board_fen = scrape_kwdb_text(gameid)
     if isinstance(board_fen, str):
         return { "nodata": "unable to read fen or stockfish error" }
