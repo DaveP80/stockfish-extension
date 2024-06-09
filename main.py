@@ -12,6 +12,7 @@ from google.cloud import firestore
 from Instance.instance import instance_info, get_instance_info
 from ev import analyze
 import hashlib
+from datetime import datetime
 
 first_moves = [
     "1. e4", "1. d4", "1. Nf3", "1. Nc3", "1. Bc4", "1. Bf4", "1. g3", "1. b3", "1. f4", "1. c4",
@@ -151,6 +152,13 @@ async def suggest_move(gameid: str):
                 instance_info.set_info(k, res)
             else:
                 instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn })
+            gameid_ref = db.collection("gamecollection")
+            gdoc_ref = gameid_ref.document(gameid + "-lichess")
+            now = datetime.now()
+
+# Get the current date in ISO format
+            iso_date = now.date().isoformat()
+            gdoc_ref.set({"info": iso_date})
             return {"data": last_text, "board": str(result), "turn": whosturn }
     except:
         if res:
@@ -158,6 +166,12 @@ async def suggest_move(gameid: str):
             instance_info.set_info(k, res)
         else:
             instance_info.set_info(k, {"data": last_text})
+        if last_text:
+            gameid_ref = db.collection("gamecollection")
+            gdoc_ref = gameid_ref.document(gameid + "-lichess")
+            now = datetime.now()
+            iso_date = now.date().isoformat()
+            gdoc_ref.set({"info": iso_date})
         return {"data": last_text }
 
 @app.get('/chesscom/')
