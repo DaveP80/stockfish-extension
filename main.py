@@ -21,6 +21,7 @@ first_moves = [
 
 gamestart = ["Game is still ongoing", "is playing"]
 
+
 GCP_PROJECT = os.getenv('GCP_PROJECT_ID')
 STOCKFISH_PATH = os.getenv('STOCKFISH_PATH') or 'stockfish'
 DESCRIPTION = """
@@ -183,6 +184,15 @@ async def chessdotcom(moves: str = Query(None)):
                 board_fen = generate_fen(None)
             str_with_sp = moves.replace("%20", " ")
             formatted = str_with_sp.split(" ")
+            gameid = formatted[-1:][0]
+            intcheck = False
+            try:
+                int(gameid)
+                intcheck = True
+            except:
+                print("no chess.com gameid found")
+            if len(gameid) > 9 and intcheck:
+                formatted.pop()
             if len(formatted) > 0 and "newgame" not in moves:
                 board_fen = generate_fen(formatted)
             if not isinstance(board_fen, str):
@@ -229,6 +239,13 @@ async def chessdotcom(moves: str = Query(None)):
                             instance_info.set_info(k, res)
                         else:
                             instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn })
+                        gameid_ref = db.collection("gamecollection")
+                        gdoc_ref = gameid_ref.document(gameid + "-chesscom")
+                        now = datetime.now()
+
+# Get the current date in ISO format
+                        iso_date = now.date().isoformat()
+                        gdoc_ref.set({"info": iso_date})
                         return {"data": last_text, "board": str(result), "turn": whosturn }
                 except:
                     if res:
@@ -236,6 +253,12 @@ async def chessdotcom(moves: str = Query(None)):
                         instance_info.set_info(k, res)
                     else:
                         instance_info.set_info(k, {"data": last_text})
+                    if last_text:
+                        gameid_ref = db.collection("gamecollection")
+                        gdoc_ref = gameid_ref.document(gameid + "-chesscom")
+                        now = datetime.now()
+                        iso_date = now.date().isoformat()
+                        gdoc_ref.set({"info": iso_date})
                     return {"data": last_text }
             return { "nodata": "error with stockfish getting moves from move list" }
         except:
