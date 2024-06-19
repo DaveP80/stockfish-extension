@@ -193,6 +193,8 @@ async def chessdotcom(moves: str = Query(None)):
                 print("no chess.com gameid found")
             if len(gameid) > 9 and intcheck:
                 formatted.pop()
+            else:
+                gameid = None
             if len(formatted) > 0 and "newgame" not in moves:
                 board_fen = generate_fen(formatted)
             if not isinstance(board_fen, str):
@@ -239,13 +241,14 @@ async def chessdotcom(moves: str = Query(None)):
                             instance_info.set_info(k, res)
                         else:
                             instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn })
-                        gameid_ref = db.collection("gamecollection")
-                        gdoc_ref = gameid_ref.document(gameid + "-chesscom")
-                        now = datetime.now()
+                        if gameid:
+                            gameid_ref = db.collection("gamecollection")
+                            gdoc_ref = gameid_ref.document(gameid + "-chesscom")
+                            now = datetime.now()
 
 # Get the current date in ISO format
-                        iso_date = now.date().isoformat()
-                        gdoc_ref.set({"info": iso_date})
+                            iso_date = now.date().isoformat()
+                            gdoc_ref.set({"info": iso_date})
                         return {"data": last_text, "board": str(result), "turn": whosturn }
                 except:
                     if res:
@@ -253,7 +256,7 @@ async def chessdotcom(moves: str = Query(None)):
                         instance_info.set_info(k, res)
                     else:
                         instance_info.set_info(k, {"data": last_text})
-                    if last_text:
+                    if last_text and gameid:
                         gameid_ref = db.collection("gamecollection")
                         gdoc_ref = gameid_ref.document(gameid + "-chesscom")
                         now = datetime.now()
