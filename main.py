@@ -30,6 +30,7 @@ best next move. This is designed to give move advice for and active lichess game
 with the url template of: https://lichess.org/<gameid>
 """
 db = firestore.Client(project=GCP_PROJECT)
+
 app = FastAPI(
     title='lichess helper',
     description=DESCRIPTION,
@@ -105,9 +106,12 @@ def index():
 
 
 @app.get('/suggest-move/{gameid}', tags=['Chess Engine'])
-async def suggest_move(gameid: str):
+async def suggest_move(gameid: str, time: str | None = None):
 
     board_fen = scrape_kwdb_text(gameid)
+    gotime = 1000
+    if time:
+        gotime = 500
     if isinstance(board_fen, str):
         return { "nodata": "unable to read fen or stockfish error" }
     k = board_fen.fen()
@@ -120,7 +124,7 @@ async def suggest_move(gameid: str):
 
     stockfish.set_fen_position(k)
     
-    stockfish._go_time(1000)
+    stockfish._go_time(gotime)
     movetopush = ""
     last_text = ""
     count = 0
@@ -176,10 +180,13 @@ async def suggest_move(gameid: str):
         return {"data": last_text }
 
 @app.get('/chesscom/')
-async def chessdotcom(moves: str = Query(None)):
+async def chessdotcom(moves: str = Query(None), time: str = Query(None)):
     if moves:
         try:
             board_fen = None
+            gotime = 1000
+            if time:
+                gotime = 500
             if "newgame" in moves:
                 board_fen = generate_fen(None)
             str_with_sp = moves.replace("%20", " ")
@@ -208,7 +215,7 @@ async def chessdotcom(moves: str = Query(None)):
 
                 stockfish.set_fen_position(k)
                 
-                stockfish._go_time(1000)
+                stockfish._go_time(gotime)
                 movetopush = ""
                 last_text = ""
                 count = 0
