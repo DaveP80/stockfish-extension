@@ -16,6 +16,8 @@ ENV STOCKFISH_PATH='/usr/games/stockfish'
 
 ENV GCP_PROJECT_ID='majestic-cairn-365919'
 
+ENV GOOGLE_APPLICATION_CREDENTIALS='/app/credentials.json'
+
 EXPOSE 8080
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
 

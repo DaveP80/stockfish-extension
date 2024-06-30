@@ -29,7 +29,9 @@ This API takes a chess game and returns the
 best next move. This is designed to give move advice for and active lichess game
 with the url template of: https://lichess.org/<gameid>
 """
-db = firestore.Client(project=GCP_PROJECT)
+#db = firestore.Client(project=GCP_PROJECT)
+
+db = firestore.Client()
 
 app = FastAPI(
     title='lichess helper',
@@ -180,7 +182,7 @@ async def suggest_move(gameid: str, time: str | None = None):
         return {"data": last_text }
 
 @app.get('/chesscom/')
-async def chessdotcom(moves: str = Query(None), time: str = Query(None)):
+async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time: str = Query(None)):
     if moves:
         try:
             board_fen = None
@@ -189,19 +191,16 @@ async def chessdotcom(moves: str = Query(None), time: str = Query(None)):
                 gotime = 500
             if "newgame" in moves:
                 board_fen = generate_fen(None)
-            str_with_sp = moves.replace("%20", " ")
-            formatted = str_with_sp.split(" ")
-            gameid = formatted[-1:][0]
+
+            formatted = moves.split(" ")
             intcheck = False
             try:
                 int(gameid)
                 intcheck = True
             except:
                 print("no chess.com gameid found")
-            if len(gameid) > 9 and intcheck:
-                formatted.pop()
-            else:
-                gameid = None
+            if len(gameid) < 9 or not intcheck:
+                gameid = ""
             if len(formatted) > 0 and "newgame" not in moves:
                 board_fen = generate_fen(formatted)
             if not isinstance(board_fen, str):
