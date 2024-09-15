@@ -29,9 +29,9 @@ This API takes a chess game and returns the
 best next move. This is designed to give move advice for and active lichess game
 with the url template of: https://lichess.org/<gameid>
 """
-#db = firestore.Client(project=GCP_PROJECT)
+db = firestore.Client(project=GCP_PROJECT)
 
-db = firestore.Client()
+#db = firestore.Client()
 
 app = FastAPI(
     title='lichess helper',
@@ -118,8 +118,8 @@ async def suggest_move(gameid: str, time: str | None = None):
         return { "nodata": "unable to read fen or stockfish error" }
     k = board_fen.fen()
     res = instance_info.get_info(k)
-    if res and ("data" in res or "board" in res or "turn" in res):
-        return filter_dict(res, ["data", "board", "turn"])
+    if res and ("data" in res or "board" in res or "turn" in res or "evaluation" in res):
+        return filter_dict(res, ["data", "board", "turn", "evaluation"])
 
     stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
     stockfish.set_depth(20)  
@@ -127,6 +127,9 @@ async def suggest_move(gameid: str, time: str | None = None):
     stockfish.set_fen_position(k)
     
     stockfish._go_time(gotime)
+    ze = stockfish.get_evaluation()['value']
+    if ze:
+        ze = round(ze/100, 2)
     movetopush = ""
     last_text = ""
     count = 0
@@ -155,10 +158,10 @@ async def suggest_move(gameid: str, time: str | None = None):
             boardstr = board_fen.fen()
             result = chess.Board(boardstr)
             if res:
-                res.update({"data": last_text, "board": str(result), "turn": whosturn })
+                res.update({"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze })
                 instance_info.set_info(k, res)
             else:
-                instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn })
+                instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze })
             gameid_ref = db.collection("gamecollection")
             gdoc_ref = gameid_ref.document(gameid + "-lichess")
             now = datetime.now()
@@ -166,20 +169,20 @@ async def suggest_move(gameid: str, time: str | None = None):
 # Get the current date in ISO format
             iso_date = now.date().isoformat()
             gdoc_ref.set({"info": iso_date})
-            return {"data": last_text, "board": str(result), "turn": whosturn }
+            return {"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze }
     except:
         if res:
-            res.update({"data": last_text})
+            res.update({"data": last_text, "evaluation": ze })
             instance_info.set_info(k, res)
         else:
-            instance_info.set_info(k, {"data": last_text})
+            instance_info.set_info(k, {"data": last_text, "evaluation": ze})
         if last_text:
             gameid_ref = db.collection("gamecollection")
             gdoc_ref = gameid_ref.document(gameid + "-lichess")
             now = datetime.now()
             iso_date = now.date().isoformat()
             gdoc_ref.set({"info": iso_date})
-        return {"data": last_text }
+        return {"data": last_text, "evaluation": ze }
 
 @app.get('/chesscom/')
 async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time: str = Query(None)):
@@ -206,8 +209,8 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
             if not isinstance(board_fen, str):
                 k = board_fen.fen()
                 res = instance_info.get_info(k)
-                if res and ("data" in res or "board" in res or "turn" in res):
-                    return filter_dict(res, ["data", "board", "turn"])
+                if res and ("data" in res or "board" in res or "turn" in res or "evaluation" in res):
+                    return filter_dict(res, ["data", "board", "turn", "evaluation"])
 
                 stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
                 stockfish.set_depth(20)  
@@ -215,6 +218,10 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                 stockfish.set_fen_position(k)
                 
                 stockfish._go_time(gotime)
+                
+                ze = stockfish.get_evaluation()['value']
+                if ze:
+                    ze = round(ze/100, 2)
                 movetopush = ""
                 last_text = ""
                 count = 0
@@ -243,10 +250,10 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                         boardstr = board_fen.fen()
                         result = chess.Board(boardstr)
                         if res:
-                            res.update({"data": last_text, "board": str(result), "turn": whosturn })
+                            res.update({"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze })
                             instance_info.set_info(k, res)
                         else:
-                            instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn })
+                            instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze })
                         if gameid:
                             gameid_ref = db.collection("gamecollection")
                             gdoc_ref = gameid_ref.document(gameid + "-chesscom")
@@ -255,20 +262,20 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
 # Get the current date in ISO format
                             iso_date = now.date().isoformat()
                             gdoc_ref.set({"info": iso_date})
-                        return {"data": last_text, "board": str(result), "turn": whosturn }
+                        return {"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze }
                 except:
                     if res:
-                        res.update({"data": last_text})
+                        res.update({"data": last_text, "evaluation": ze})
                         instance_info.set_info(k, res)
                     else:
-                        instance_info.set_info(k, {"data": last_text})
+                        instance_info.set_info(k, {"data": last_text, "evaluation": ze})
                     if last_text and gameid:
                         gameid_ref = db.collection("gamecollection")
                         gdoc_ref = gameid_ref.document(gameid + "-chesscom")
                         now = datetime.now()
                         iso_date = now.date().isoformat()
                         gdoc_ref.set({"info": iso_date})
-                    return {"data": last_text }
+                    return {"data": last_text, "evaluation": ze }
             return { "nodata": "error with stockfish getting moves from move list" }
         except:
             return { "nodata": "error reading query param string" }
@@ -284,6 +291,9 @@ async def eval_fen(fen: str = Query(None)):
 
             stockfish.set_fen_position(fen)
             stockfish._go_time(1300)
+            ze = stockfish.get_evaluation()['value']
+            if ze:
+                ze = round(ze/100, 2)
             last_text = ""
             count = 0
             while True:
@@ -301,7 +311,7 @@ async def eval_fen(fen: str = Query(None)):
                 return { "nodata": "unable to read fen or stockfish error" } 
 
             evalboard = chess.Board(fen)
-            return {"data": last_text, "board": str(evalboard) }
+            return {"data": last_text, "board": str(evalboard), "evaluation": ze }
         except:
             return { "nodata": "bad fen string"}
     else:
