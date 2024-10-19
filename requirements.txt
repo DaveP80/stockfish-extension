@@ -4,9 +4,8 @@ stockfish
 beautifulsoup4==4.12.3
 certifi==2024.2.2
 charset-normalizer==3.3.2
-chess==1.10.0
+chess==1.11.1
 idna==3.6
-python-chess==1.999
 soupsieve==2.5
 requests
 google-cloud-firestore

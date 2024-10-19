@@ -1,5 +1,6 @@
 import os
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
+from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 from fastapi.middleware.cors import CORSMiddleware
 from stockfish import Stockfish
 from pydantic import BaseModel
@@ -31,7 +32,7 @@ with the url template of: https://lichess.org/<gameid>
 """
 db = firestore.Client(project=GCP_PROJECT)
 
-#db = firestore.Client()
+# db = firestore.Client()
 
 app = FastAPI(
     title='lichess helper',
@@ -120,48 +121,27 @@ async def suggest_move(gameid: str, time: str | None = None):
     res = instance_info.get_info(k)
     if res and ("data" in res or "board" in res or "turn" in res or "evaluation" in res):
         return filter_dict(res, ["data", "board", "turn", "evaluation"])
-
-    stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
-    stockfish.set_depth(20)  
-
-    stockfish.set_fen_position(k)
-    
-    stockfish._go_time(gotime)
-    ze = stockfish.get_evaluation()['value']
-    if ze:
-        ze = round(ze/100, 2)
-    movetopush = ""
-    last_text = ""
-    count = 0
-    while True:
-        if count > 5000:
-            break
-        text = stockfish._read_line()
-        splitted_text = text.split(" ")
-        if splitted_text[0] == "bestmove":
-            stockfish.info = last_text
-            last_text = None if splitted_text[1] == "(none)" else " ".join(splitted_text)
-            if last_text != None:
-                movetopush = splitted_text[1]
-            break
-        last_text = text
-        count += 1
-    if count > 4999 or last_text == None:
-        return { "nodata": "unable to read fen or stockfish error" } 
     try:
-        if movetopush != "":
+
+        stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "False"})
+        stockfish.set_depth(20)  
+
+        stockfish.set_fen_position(k)
+        bestmove = stockfish.get_best_move_time(gotime)
+        ze = stockfish.get_evaluation()
+        try:
             whosturn = "white"
             if board_fen.turn != chess.WHITE:
                 whosturn = "black"
-            move = chess.Move.from_uci(movetopush)
+            move = chess.Move.from_uci(bestmove)
             board_fen.push(move)
             boardstr = board_fen.fen()
             result = chess.Board(boardstr)
             if res:
-                res.update({"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze })
+                res.update({"data": bestmove, "board": str(result), "turn": whosturn, "evaluation": ze })
                 instance_info.set_info(k, res)
             else:
-                instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze })
+                instance_info.set_info(k, {"data": bestmove, "board": str(result), "turn": whosturn, "evaluation": ze })
             gameid_ref = db.collection("gamecollection")
             gdoc_ref = gameid_ref.document(gameid + "-lichess")
             now = datetime.now()
@@ -169,20 +149,25 @@ async def suggest_move(gameid: str, time: str | None = None):
 # Get the current date in ISO format
             iso_date = now.date().isoformat()
             gdoc_ref.set({"info": iso_date})
-            return {"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze }
-    except:
-        if res:
-            res.update({"data": last_text, "evaluation": ze })
-            instance_info.set_info(k, res)
-        else:
-            instance_info.set_info(k, {"data": last_text, "evaluation": ze})
-        if last_text:
-            gameid_ref = db.collection("gamecollection")
-            gdoc_ref = gameid_ref.document(gameid + "-lichess")
-            now = datetime.now()
-            iso_date = now.date().isoformat()
-            gdoc_ref.set({"info": iso_date})
-        return {"data": last_text, "evaluation": ze }
+            return {"data": bestmove, "board": str(result), "turn": whosturn, "evaluation": ze }
+        except:
+            if res:
+                res.update({"data": bestmove, "evaluation": ze })
+                instance_info.set_info(k, res)
+            else:
+                instance_info.set_info(k, {"data": bestmove, "evaluation": ze })
+            if bestmove:
+                gameid_ref = db.collection("gamecollection")
+                gdoc_ref = gameid_ref.document(gameid + "-lichess")
+                now = datetime.now()
+                iso_date = now.date().isoformat()
+                gdoc_ref.set({"info": iso_date})
+            return {"data": bestmove, "evaluation": ze }
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="An internal server error occurred"
+        )
 
 @app.get('/chesscom/')
 async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time: str = Query(None)):
@@ -211,72 +196,54 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                 res = instance_info.get_info(k)
                 if res and ("data" in res or "board" in res or "turn" in res or "evaluation" in res):
                     return filter_dict(res, ["data", "board", "turn", "evaluation"])
-
-                stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "true"})
-                stockfish.set_depth(20)  
-
-                stockfish.set_fen_position(k)
-                
-                stockfish._go_time(gotime)
-                
-                ze = stockfish.get_evaluation()['value']
-                if ze:
-                    ze = round(ze/100, 2)
-                movetopush = ""
-                last_text = ""
-                count = 0
-                while True:
-                    if count > 5000:
-                        break
-                    text = stockfish._read_line()
-                    splitted_text = text.split(" ")
-                    if splitted_text[0] == "bestmove":
-                        stockfish.info = last_text
-                        last_text = None if splitted_text[1] == "(none)" else " ".join(splitted_text)
-                        if last_text != None:
-                            movetopush = splitted_text[1]
-                        break
-                    last_text = text
-                    count += 1
-                if count > 4999 or last_text == None:
-                    return { "nodata": "unable to read fen or stockfish error" } 
                 try:
-                    if movetopush != "":
+
+                    stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "False"})
+                    stockfish.set_depth(20)  
+
+                    stockfish.set_fen_position(k)
+                    
+                    bestmove = stockfish.get_best_move_time(gotime)
+                    ze = stockfish.get_evaluation()
+                    try:
                         whosturn = "white"
                         if board_fen.turn != chess.WHITE:
                             whosturn = "black"
-                        move = chess.Move.from_uci(movetopush)
+                        move = chess.Move.from_uci(bestmove)
                         board_fen.push(move)
                         boardstr = board_fen.fen()
                         result = chess.Board(boardstr)
                         if res:
-                            res.update({"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze })
+                            res.update({"data": bestmove, "board": str(result), "turn": whosturn, "evaluation": ze })
                             instance_info.set_info(k, res)
                         else:
-                            instance_info.set_info(k, {"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze })
+                            instance_info.set_info(k, {"data": bestmove, "board": str(result), "turn": whosturn, "evaluation": ze })
                         if gameid:
                             gameid_ref = db.collection("gamecollection")
                             gdoc_ref = gameid_ref.document(gameid + "-chesscom")
                             now = datetime.now()
-
 # Get the current date in ISO format
                             iso_date = now.date().isoformat()
                             gdoc_ref.set({"info": iso_date})
-                        return {"data": last_text, "board": str(result), "turn": whosturn, "evaluation": ze }
-                except:
-                    if res:
-                        res.update({"data": last_text, "evaluation": ze})
-                        instance_info.set_info(k, res)
-                    else:
-                        instance_info.set_info(k, {"data": last_text, "evaluation": ze})
-                    if last_text and gameid:
-                        gameid_ref = db.collection("gamecollection")
-                        gdoc_ref = gameid_ref.document(gameid + "-chesscom")
-                        now = datetime.now()
-                        iso_date = now.date().isoformat()
-                        gdoc_ref.set({"info": iso_date})
-                    return {"data": last_text, "evaluation": ze }
-            return { "nodata": "error with stockfish getting moves from move list" }
+                        return {"data": bestmove, "board": str(result), "turn": whosturn, "evaluation": ze }
+                    except:
+                        if res:
+                            res.update({"data": bestmove, "evaluation": ze})
+                            instance_info.set_info(k, res)
+                        else:
+                            instance_info.set_info(k, {"data": bestmove, "evaluation": ze})
+                        if bestmove and gameid:
+                            gameid_ref = db.collection("gamecollection")
+                            gdoc_ref = gameid_ref.document(gameid + "-chesscom")
+                            now = datetime.now()
+                            iso_date = now.date().isoformat()
+                            gdoc_ref.set({"info": iso_date})
+                        return {"data": bestmove, "evaluation": ze }
+                except Exception as e:
+                    raise HTTPException(
+                                    status_code=HTTP_500_INTERNAL_SERVER_ERROR, 
+                                    detail="An internal server error occurred"
+                                )
         except:
             return { "nodata": "error reading query param string" }
     return { "nodata": "no move list sent to server"}
@@ -285,35 +252,20 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
 async def eval_fen(fen: str = Query(None)):
     if fen:
         try:
-            stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 3, "Ponder": "true"})
+            stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 3, "Ponder": "False"})
             stockfish.set_depth(20)
             fen.replace("%20", " ")
 
             stockfish.set_fen_position(fen)
-            stockfish._go_time(1300)
-            ze = stockfish.get_evaluation()['value']
-            if ze:
-                ze = round(ze/100, 2)
-            last_text = ""
-            count = 0
-            while True:
-                if count > 5000:
-                    break
-                text = stockfish._read_line()
-                splitted_text = text.split(" ")
-                if splitted_text[0] == "bestmove":
-                    stockfish.info = last_text
-                    last_text = None if splitted_text[1] == "(none)" else " ".join(splitted_text)
-                    break
-                last_text = text
-                count += 1
-            if count > 4999 or last_text == None:
-                return { "nodata": "unable to read fen or stockfish error" } 
-
+            bestmove = stockfish.get_best_move_time(1300)
+            ze = stockfish.get_evaluation()
             evalboard = chess.Board(fen)
-            return {"data": last_text, "board": str(evalboard), "evaluation": ze }
-        except:
-            return { "nodata": "bad fen string"}
+            return {"data": bestmove, "board": str(evalboard), "evaluation": ze }
+        except Exception as e:
+            raise HTTPException(
+                status_code=HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail="An internal server error occurred"
+            )
     else:
         return {"message": "No query parameter provided"}
 
