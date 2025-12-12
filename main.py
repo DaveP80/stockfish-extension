@@ -33,6 +33,7 @@ with the url template of: https://lichess.org/<gameid>
 """
 db = firestore.Client(project=GCP_PROJECT)
 
+#Below setup is for local docker development
 #db = firestore.Client()
 
 app = FastAPI(
@@ -137,7 +138,7 @@ async def suggest_move(gameid: str, time: str | None = None):
         #stockfish.set_fen_position(k)
         bestmove = ""
         #evaluation
-        ze = 0.00
+        ze = {"type": "cp", "value": 0}
 
         engine.stdin.write(f'position fen {k}\n')
         engine.stdin.write('setoption name Threads value 2\n')
@@ -158,8 +159,10 @@ async def suggest_move(gameid: str, time: str | None = None):
                 for n in range(len(lineSplit)):
                     if lineSplit[n] == "score":
                         evalType = lineSplit[n + 1]
-                        ze = str(int(lineSplit[n + 2]) * evalSign)
-                                
+                        ss = int(lineSplit[n + 2] * evalSign)
+                        ze["type"] = evalType
+                        ze["value"] = ss
+
             if line.startswith('bestmove'): # Get computer move if available
                 x = line.split(' ')
                 bestmove = x[1]
@@ -236,17 +239,13 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                 if res and ("data" in res or "board" in res or "turn" in res or "evaluation" in res):
                     return filter_dict(res, ["data", "board", "turn", "evaluation"])
                 try:
-                    print("- - - - - -- - - -- - ")
-                    print(k)
-                    print("______________")
-                    print(moves, gameid, time)
                     engine = subprocess.Popen('/usr/games/stockfish', universal_newlines=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
                     #stockfish.set_depth(22)  
 
                     #stockfish.set_fen_position(k)
                     bestmove = ""
                     #evaluation
-                    ze = 0.00
+                    ze = {"type": "cp", "value": 0}
 
                     engine.stdin.write(f'position fen {k}\n')
                     engine.stdin.write('setoption name Threads value 2\n')
@@ -267,7 +266,9 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                             for n in range(len(lineSplit)):
                                 if lineSplit[n] == "score":
                                     evalType = lineSplit[n + 1]
-                                    ze = str(int(lineSplit[n + 2]) * evalSign)
+                                    ss = int(lineSplit[n + 2] * evalSign)
+                                    ze["type"] = evalType
+                                    ze["value"] = ss
                                             
                         if line.startswith('bestmove'): # Get computer move if available
                             x = line.split(' ')
