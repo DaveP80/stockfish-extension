@@ -14,6 +14,7 @@ from Instance.instance import instance_info, get_instance_info
 from ev import analyze
 import hashlib
 from datetime import datetime
+import subprocess
 
 first_moves = [
     "1. e4", "1. d4", "1. Nf3", "1. Nc3", "1. Bc4", "1. Bf4", "1. g3", "1. b3", "1. f4", "1. c4",
@@ -32,12 +33,12 @@ with the url template of: https://lichess.org/<gameid>
 """
 db = firestore.Client(project=GCP_PROJECT)
 
-# db = firestore.Client()
+#db = firestore.Client()
 
 app = FastAPI(
     title='lichess helper',
     description=DESCRIPTION,
-    version='1.0.0'
+    version='1.26.0'
 )
 
 app.add_middleware(
@@ -47,6 +48,9 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+#gotimes standard: 2000
+#blitz: 1000
+#classical: 5000
 
 class UserBody(BaseModel):
     user: str
@@ -112,9 +116,13 @@ def index():
 async def suggest_move(gameid: str, time: str | None = None):
 
     board_fen = scrape_kwdb_text(gameid)
-    gotime = 1000
+    gotime = 2000
     if time:
-        gotime = 500
+        if time == "go":
+            gotime = 500
+        else:
+            gotime = time
+    print(gotime)
     if isinstance(board_fen, str):
         return { "nodata": "unable to read fen or stockfish error" }
     k = board_fen.fen()
@@ -123,12 +131,40 @@ async def suggest_move(gameid: str, time: str | None = None):
         return filter_dict(res, ["data", "board", "turn", "evaluation"])
     try:
 
-        stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "False"})
-        stockfish.set_depth(20)  
+        engine = subprocess.Popen('/usr/games/stockfish', universal_newlines=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        #stockfish.set_depth(22)  
 
-        stockfish.set_fen_position(k)
-        bestmove = stockfish.get_best_move_time(gotime)
-        ze = stockfish.get_evaluation()
+        #stockfish.set_fen_position(k)
+        bestmove = ""
+        #evaluation
+        ze = 0.00
+
+        engine.stdin.write(f'position fen {k}\n')
+        engine.stdin.write('setoption name Threads value 2\n')
+        engine.stdin.flush()
+
+        # Get engine move
+        engine.stdin.write(f'go depth 22 movetime {gotime}\n')
+        engine.stdin.flush()
+
+        evalSign = 1 if "w" in k else -1
+                
+        # Process output
+        while True:
+            line = engine.stdout.readline().strip()
+            lineSplit = line.split(" ")
+            
+            if lineSplit[0] == "info":
+                for n in range(len(lineSplit)):
+                    if lineSplit[n] == "score":
+                        evalType = lineSplit[n + 1]
+                        ze = str(int(lineSplit[n + 2]) * evalSign)
+                                
+            if line.startswith('bestmove'): # Get computer move if available
+                x = line.split(' ')
+                bestmove = x[1]
+                break;
+
         try:
             whosturn = "white"
             if board_fen.turn != chess.WHITE:
@@ -174,9 +210,12 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
     if moves:
         try:
             board_fen = None
-            gotime = 1000
+            gotime = 2000
             if time:
-                gotime = 500
+                if time == "go":
+                    gotime = 500
+                else:
+                    gotime = time
             if "newgame" in moves:
                 board_fen = generate_fen(None)
 
@@ -197,14 +236,44 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                 if res and ("data" in res or "board" in res or "turn" in res or "evaluation" in res):
                     return filter_dict(res, ["data", "board", "turn", "evaluation"])
                 try:
+                    print("- - - - - -- - - -- - ")
+                    print(k)
+                    print("______________")
+                    print(moves, gameid, time)
+                    engine = subprocess.Popen('/usr/games/stockfish', universal_newlines=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+                    #stockfish.set_depth(22)  
 
-                    stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 2, "Ponder": "False"})
-                    stockfish.set_depth(20)  
+                    #stockfish.set_fen_position(k)
+                    bestmove = ""
+                    #evaluation
+                    ze = 0.00
 
-                    stockfish.set_fen_position(k)
-                    
-                    bestmove = stockfish.get_best_move_time(gotime)
-                    ze = stockfish.get_evaluation()
+                    engine.stdin.write(f'position fen {k}\n')
+                    engine.stdin.write('setoption name Threads value 2\n')
+                    engine.stdin.flush()
+
+                    # Get engine move
+                    engine.stdin.write(f'go depth 22 movetime {gotime}\n')
+                    engine.stdin.flush()
+
+                    evalSign = 1 if "w" in k else -1
+                            
+                    # Process output
+                    while True:
+                        line = engine.stdout.readline().strip()
+                        lineSplit = line.split(" ")
+                        
+                        if lineSplit[0] == "info":
+                            for n in range(len(lineSplit)):
+                                if lineSplit[n] == "score":
+                                    evalType = lineSplit[n + 1]
+                                    ze = str(int(lineSplit[n + 2]) * evalSign)
+                                            
+                        if line.startswith('bestmove'): # Get computer move if available
+                            x = line.split(' ')
+                            bestmove = x[1]
+                            break;
+
                     try:
                         whosturn = "white"
                         if board_fen.turn != chess.WHITE:
@@ -246,18 +315,20 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                                 )
         except:
             return { "nodata": "error reading query param string" }
-    return { "nodata": "no move list sent to server"}
+    else:
+        return { "nodata": "no move list sent to server"}
+
 
 @app.get("/evaluation/")
 async def eval_fen(fen: str = Query(None)):
     if fen:
         try:
             stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 3, "Ponder": "False"})
-            stockfish.set_depth(20)
+            stockfish.set_depth(22)
             fen.replace("%20", " ")
 
             stockfish.set_fen_position(fen)
-            bestmove = stockfish.get_best_move_time(1300)
+            bestmove = stockfish.get_best_move_time(3000)
             ze = stockfish.get_evaluation()
             evalboard = chess.Board(fen)
             return {"data": bestmove, "board": str(evalboard), "evaluation": ze }
