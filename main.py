@@ -122,7 +122,6 @@ async def suggest_move(gameid: str, time: str | None = None):
             gotime = 500
         else:
             gotime = time
-    print(gotime)
     if isinstance(board_fen, str):
         return { "nodata": "unable to read fen or stockfish error" }
     k = board_fen.fen()
@@ -236,10 +235,6 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                 if res and ("data" in res or "board" in res or "turn" in res or "evaluation" in res):
                     return filter_dict(res, ["data", "board", "turn", "evaluation"])
                 try:
-                    print("- - - - - -- - - -- - ")
-                    print(k)
-                    print("______________")
-                    print(moves, gameid, time)
                     engine = subprocess.Popen('/usr/games/stockfish', universal_newlines=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
                     #stockfish.set_depth(22)  
 
