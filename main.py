@@ -135,7 +135,7 @@ async def suggest_move(gameid: str, time: str | None = None):
         #stockfish.set_depth(22)  
 
         #stockfish.set_fen_position(k)
-        bestmove = ""
+        bestmove = "(none)"
         #evaluation
         ze = {"type": "cp", "value": 0}
 
@@ -148,9 +148,10 @@ async def suggest_move(gameid: str, time: str | None = None):
         engine.stdin.flush()
 
         evalSign = 1 if "w" in k else -1
-                
+        
+        count = 0
         # Process output
-        while True:
+        while count<50:
             line = engine.stdout.readline().strip()
             lineSplit = line.split(" ")
             
@@ -161,18 +162,36 @@ async def suggest_move(gameid: str, time: str | None = None):
                         ss = int(lineSplit[n + 2] * evalSign)
                         ze["type"] = evalType
                         ze["value"] = ss
-
+                        if evalType == "mate" and lineSplit[n+2] == "0":
+                            break
+                                
             if line.startswith('bestmove'): # Get computer move if available
                 x = line.split(' ')
                 bestmove = x[1]
-                break;
+                break
+            count += 1
+            if count > 49:
+                if lineSplit[0] == "info":
+                    for n in range(len(lineSplit)):
+                        if lineSplit[n] == "score":
+                            evalType = lineSplit[n + 1]
+                            ss = int(lineSplit[n + 2] * evalSign)
+                            ze["type"] = evalType
+                            ze["value"] = ss
+                            if evalType == "mate" and lineSplit[n+2] == "0":
+                                break
+                        if lineSplit[n] == "pv":
+                            bestmove = lineSplit[n+1]
+                break
+        engine.terminate()
 
         try:
             whosturn = "white"
             if board_fen.turn != chess.WHITE:
                 whosturn = "black"
-            move = chess.Move.from_uci(bestmove)
-            board_fen.push(move)
+            if bestmove != "(none)":
+                move = chess.Move.from_uci(bestmove)
+                board_fen.push(move)
             boardstr = board_fen.fen()
             result = chess.Board(boardstr)
             if res:
@@ -255,9 +274,9 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                     engine.stdin.flush()
 
                     evalSign = 1 if "w" in k else -1
-                            
+                    count = 0
                     # Process output
-                    while True:
+                    while count<50:
                         line = engine.stdout.readline().strip()
                         lineSplit = line.split(" ")
                         
@@ -268,18 +287,38 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                                     ss = int(lineSplit[n + 2] * evalSign)
                                     ze["type"] = evalType
                                     ze["value"] = ss
+                                    if evalType == "mate" and lineSplit[n+2] == "0":
+                                        break
                                             
                         if line.startswith('bestmove'): # Get computer move if available
                             x = line.split(' ')
                             bestmove = x[1]
-                            break;
+                            break
+                        count += 1
+                        if count > 49:
+                            if lineSplit[0] == "info":
+                                for n in range(len(lineSplit)):
+                                    if lineSplit[n] == "score":
+                                        evalType = lineSplit[n + 1]
+                                        ss = int(lineSplit[n + 2] * evalSign)
+                                        ze["type"] = evalType
+                                        ze["value"] = ss
+                                        if evalType == "mate" and lineSplit[n+2] == "0":
+                                            break
+                                    if lineSplit[n] == "pv":
+                                        bestmove = lineSplit[n+1]
+                            break
 
+                    engine.terminate()
                     try:
                         whosturn = "white"
                         if board_fen.turn != chess.WHITE:
                             whosturn = "black"
-                        move = chess.Move.from_uci(bestmove)
-                        board_fen.push(move)
+                        if bestmove != "(none)":
+                            move = chess.Move.from_uci(bestmove)
+                            board_fen.push(move)
+                        else:
+                            move = ""
                         boardstr = board_fen.fen()
                         result = chess.Board(boardstr)
                         if res:
