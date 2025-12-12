@@ -133,8 +133,6 @@ async def suggest_move(gameid: str, time: str | None = None):
 
         engine = subprocess.Popen('/usr/games/stockfish', universal_newlines=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         #stockfish.set_depth(22)  
-
-        #stockfish.set_fen_position(k)
         bestmove = "(none)"
         #evaluation
         ze = {"type": "cp", "value": 0}
@@ -142,49 +140,44 @@ async def suggest_move(gameid: str, time: str | None = None):
         engine.stdin.write(f'position fen {k}\n')
         engine.stdin.write('setoption name Threads value 2\n')
         engine.stdin.flush()
-
         # Get engine move
         engine.stdin.write(f'go depth 22 movetime {gotime}\n')
         engine.stdin.flush()
 
         evalSign = 1 if "w" in k else -1
-        
-        count = 0
         # Process output
-        while count<50:
-            line = engine.stdout.readline().strip()
-            lineSplit = line.split(" ")
-            
-            if lineSplit[0] == "info":
-                for n in range(len(lineSplit)):
-                    if lineSplit[n] == "score":
-                        evalType = lineSplit[n + 1]
-                        ss = int(lineSplit[n + 2] * evalSign)
-                        ze["type"] = evalType
-                        ze["value"] = ss
-                        if evalType == "mate" and lineSplit[n+2] == "0":
-                            break
-                                
-            if line.startswith('bestmove'): # Get computer move if available
-                x = line.split(' ')
-                bestmove = x[1]
+        while True:
+            line = engine.stdout.readline()
+            if not line:
                 break
-            count += 1
-            if count > 49:
-                if lineSplit[0] == "info":
-                    for n in range(len(lineSplit)):
-                        if lineSplit[n] == "score":
-                            evalType = lineSplit[n + 1]
-                            ss = int(lineSplit[n + 2] * evalSign)
-                            ze["type"] = evalType
-                            ze["value"] = ss
-                            if evalType == "mate" and lineSplit[n+2] == "0":
-                                break
-                        if lineSplit[n] == "pv":
-                            bestmove = lineSplit[n+1]
-                break
-        engine.terminate()
+            line = line.strip()
+            parts = line.split(" ")
+            for i,j in enumerate(parts):
 
+                if "score" == j:
+                    if i + 2 < len(parts):
+                        eval_type = parts[i + 1]   # "cp" or "mate"
+                        eval_val_raw = parts[i + 2]
+                        val = 0.00
+                        try:
+                            val = int(eval_val_raw)
+                        except ValueError:
+                            pass
+                        if eval_type == "cp":
+                            val *= evalSign  # make positive for side to move
+                            ze = {"type": eval_type, "value": val}
+                        if eval_type == "mate":
+                            ze = {"type": eval_type, "value": eval_val_raw} 
+
+            if parts and parts[0] == "bestmove":
+                if len(parts) > 1:
+                    bestmove = parts[1]
+                break
+
+        # Clean up the engine
+        engine.stdin.write("quit\n")
+        engine.stdin.flush()
+        engine.wait()
         try:
             whosturn = "white"
             if board_fen.turn != chess.WHITE:
@@ -260,7 +253,6 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                     engine = subprocess.Popen('/usr/games/stockfish', universal_newlines=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
                     #stockfish.set_depth(22)  
 
-                    #stockfish.set_fen_position(k)
                     bestmove = ""
                     #evaluation
                     ze = {"type": "cp", "value": 0}
@@ -268,48 +260,43 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
                     engine.stdin.write(f'position fen {k}\n')
                     engine.stdin.write('setoption name Threads value 2\n')
                     engine.stdin.flush()
-
                     # Get engine move
                     engine.stdin.write(f'go depth 22 movetime {gotime}\n')
                     engine.stdin.flush()
 
                     evalSign = 1 if "w" in k else -1
-                    count = 0
-                    # Process output
-                    while count<50:
-                        line = engine.stdout.readline().strip()
-                        lineSplit = line.split(" ")
-                        
-                        if lineSplit[0] == "info":
-                            for n in range(len(lineSplit)):
-                                if lineSplit[n] == "score":
-                                    evalType = lineSplit[n + 1]
-                                    ss = int(lineSplit[n + 2] * evalSign)
-                                    ze["type"] = evalType
-                                    ze["value"] = ss
-                                    if evalType == "mate" and lineSplit[n+2] == "0":
-                                        break
-                                            
-                        if line.startswith('bestmove'): # Get computer move if available
-                            x = line.split(' ')
-                            bestmove = x[1]
+                    while True:
+                        line = engine.stdout.readline()
+                        if not line:
                             break
-                        count += 1
-                        if count > 49:
-                            if lineSplit[0] == "info":
-                                for n in range(len(lineSplit)):
-                                    if lineSplit[n] == "score":
-                                        evalType = lineSplit[n + 1]
-                                        ss = int(lineSplit[n + 2] * evalSign)
-                                        ze["type"] = evalType
-                                        ze["value"] = ss
-                                        if evalType == "mate" and lineSplit[n+2] == "0":
-                                            break
-                                    if lineSplit[n] == "pv":
-                                        bestmove = lineSplit[n+1]
+                        line = line.strip()
+                        parts = line.split(" ")
+                        for i,j in enumerate(parts):
+
+                            if "score" == j:
+                                if i + 2 < len(parts):
+                                    eval_type = parts[i + 1]   # "cp" or "mate"
+                                    eval_val_raw = parts[i + 2]
+                                    val = 0.00
+                                    try:
+                                        val = int(eval_val_raw)
+                                    except ValueError:
+                                        pass
+                                    if eval_type == "cp":
+                                        val *= evalSign  # make positive for side to move
+                                        ze = {"type": eval_type, "value": val}
+                                    if eval_type == "mate":
+                                        ze = {"type": eval_type, "value": eval_val_raw} 
+
+                        if parts and parts[0] == "bestmove":
+                            if len(parts) > 1:
+                                bestmove = parts[1]
                             break
 
-                    engine.terminate()
+                    # Clean up the engine
+                    engine.stdin.write("quit\n")
+                    engine.stdin.flush()
+                    engine.wait()
                     try:
                         whosturn = "white"
                         if board_fen.turn != chess.WHITE:
