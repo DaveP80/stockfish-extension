@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 from fastapi.middleware.cors import CORSMiddleware
 from stockfish import Stockfish
@@ -15,6 +15,9 @@ from ev import analyze
 import hashlib
 from datetime import datetime
 import subprocess
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 first_moves = [
     "1. e4", "1. d4", "1. Nf3", "1. Nc3", "1. Bc4", "1. Bf4", "1. g3", "1. b3", "1. f4", "1. c4",
@@ -49,6 +52,10 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 #gotimes standard: 2000
 #blitz: 1000
 #classical: 5000
@@ -114,7 +121,8 @@ def index():
 
 
 @app.get('/suggest-move/{gameid}', tags=['Chess Engine'])
-async def suggest_move(gameid: str, time: str | None = None):
+@limiter.limit("400/hour;20/minute")
+async def suggest_move(request: Request, gameid: str, time: str | None = None):
 
     board_fen = scrape_kwdb_text(gameid)
     gotime = 2000
@@ -220,7 +228,8 @@ async def suggest_move(gameid: str, time: str | None = None):
         )
 
 @app.get('/chesscom/')
-async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time: str = Query(None)):
+@limiter.limit("400/hour;20/minute")
+async def chessdotcom(request: Request, moves: str = Query(None), gameid: str = Query(None), time: str = Query(None)):
     if moves:
         try:
             board_fen = None
@@ -346,7 +355,8 @@ async def chessdotcom(moves: str = Query(None), gameid: str = Query(None), time:
 
 
 @app.get("/evaluation/")
-async def eval_fen(fen: str = Query(None)):
+@limiter.limit("18/minute")
+async def eval_fen(request: Request, fen: str = Query(None)):
     if fen:
         try:
             stockfish = Stockfish(path=STOCKFISH_PATH, parameters={"Threads": 3, "Ponder": "False"})
@@ -372,7 +382,8 @@ async def eval_fen(fen: str = Query(None)):
 #     return {}
 
 @app.post('/set-avatar')
-async def set_avatar(user: UserBody):
+@limiter.limit("5/minute")
+async def set_avatar(request: Request, user: UserBody):
     collection_ref = db.collection("chessextension")
     if user.user and user.img:
       doc_ref = collection_ref.document(user.user)
@@ -383,7 +394,8 @@ async def set_avatar(user: UserBody):
         return { "nodata": "missing username string and image string" }
 
 @app.get('/get-useravatar/{username}', tags=['fetch avatar'])
-async def get_useravatar(username: str):
+@limiter.limit("5/minute")
+async def get_useravatar(request: Request, username: str):
     doc_ref = db.collection(u'chessextension').document(username)
     doc = doc_ref.get()
 

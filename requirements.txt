@@ -9,3 +9,4 @@ idna==3.6
 soupsieve==2.5
 requests
 google-cloud-firestore
+slowapi
