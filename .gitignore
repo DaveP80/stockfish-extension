@@ -4,3 +4,4 @@ venv
 notes.txt
 scrapy
 credentials.json
+__pycache__
