@@ -37,4 +37,17 @@ export GCR_REGION="us-east4"
 gcloud builds submit --tag gcr.io/${GCP_PROJECT_ID}/${DOCKER_IMAGE_NAME}:<tagname>
 
 gcloud run deploy <cloud_name> --image gcr.io/${GCP_PROJECT_ID}/${DOCKER_IMAGE_NAME}:<tagname>
+
+```
+### API Testing
+
+```bash
+
+#parameter include the list of moves in (san) and the gameid of the lichess game
+curl "localhost:8080/suggest-move/?moves=e4%20c5%20Bc4%20Nc6%20Bxf7%20Kxf7&gameid=UO884j0o?time=2000"
+
+#new game test
+
+curl "localhost:8080/suggest-move/?moves=newgame&gameid=UOdRadf0o?time=2000"
+
 ```

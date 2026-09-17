@@ -5,13 +5,9 @@ from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 from fastapi.middleware.cors import CORSMiddleware
 from stockfish import Stockfish
 from pydantic import BaseModel
-from bs4 import BeautifulSoup
 import chess
-from scrappy import getAvatars
 from google.cloud import firestore
 from Instance.instance import instance_info, get_instance_info
-from ev import analyze
-import hashlib
 from datetime import datetime
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -131,7 +127,7 @@ def index():
 
     return {'message': 'Welcome to stockfish chess helper API.'}
 
-
+#lichess api endpoint
 @app.get('/suggest-move/', tags=['Chess Engine'])
 @limiter.limit("400/hour;20/minute")
 async def suggest_move(request: Request, moves: str = Query(None), gameid: str = Query(None), time: str = Query(None)):
@@ -309,11 +305,6 @@ async def eval_fen(request: Request, fen: str = Query(None)):
             )
     else:
         return {"message": "No query parameter provided"}
-
-# @app.get('/get-avatars', tags=['urls'])
-# async def get_urls():
-#     getAvatars()
-#     return {}
 
 @app.post('/set-avatar')
 @limiter.limit("5/minute")
